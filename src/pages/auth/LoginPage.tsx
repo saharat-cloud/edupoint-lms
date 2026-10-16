@@ -10,7 +10,7 @@ import {
   Trophy, 
   Sparkles, 
   Gamepad2, 
-  CreditCard, 
+  BookOpen, 
   ArrowRight,
   ShieldCheck,
   CheckCircle2
@@ -150,11 +150,11 @@ export default function LoginPage() {
             {/* Card 3 */}
             <div className="bg-white/80 backdrop-blur-md border border-white/90 shadow-[0_8px_25px_rgba(0,0,0,0.04)] rounded-2xl p-5 hover:bg-white hover:shadow-[0_12px_35px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1 group">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center mb-3.5 group-hover:scale-110 transition-transform">
-                <CreditCard className="w-5 h-5 text-emerald-600" />
+                <BookOpen className="w-5 h-5 text-emerald-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 mb-1">Smart Kiosk Check-in</h3>
+              <h3 className="text-base font-bold text-slate-900 mb-1">Gradebook & Analytics</h3>
               <p className="text-xs text-slate-500 leading-relaxed font-normal">
-                สแกนบัตรหรือกรอกรหัสนักเรียน เช็คชื่อและดูคะแนนได้อย่างรวดเร็ว
+                บันทึกคะแนน ตรวจสอบพัฒนาการรายบุคคล และตัดเกรดอัตโนมัติแม่นยำ
               </p>
             </div>
           </div>
@@ -195,12 +195,6 @@ export default function LoginPage() {
               <p className="text-xs text-slate-500">ระบบจัดการการเรียนรู้</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/kiosk')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 hover:bg-amber-100 transition-colors"
-          >
-            <CreditCard className="w-3.5 h-3.5" /> Kiosk
-          </button>
         </div>
 
         {/* Form Container */}
@@ -303,20 +297,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Access Kiosk Button for Students */}
-          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/kiosk')}
-              className="w-full py-2.5 px-4 rounded-xl border border-amber-200 bg-amber-50/80 hover:bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer shadow-sm"
-            >
-              <CreditCard className="w-4 h-4 text-amber-600" />
-              <span>สำหรับนักเรียน: เข้าโหมด Kiosk (แตะบัตร/รหัส)</span>
-            </button>
-          </div>
-
           {/* Role Badges */}
-          <div className="mt-6">
+          <div className="mt-8 pt-6 border-t border-slate-100">
             <p className="text-[11px] font-bold text-slate-400 text-center mb-2.5 uppercase tracking-wider">
               สิทธิ์การเข้าใช้งานในระบบ
             </p>
@@ -325,7 +307,6 @@ export default function LoginPage() {
                 { role: 'ผู้ดูแลระบบ', color: 'bg-primary-50 text-primary-700 border-primary-200' },
                 { role: 'ครูผู้สอน', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
                 { role: 'นักเรียน', color: 'bg-violet-50 text-violet-700 border-violet-200' },
-                { role: 'Kiosk', color: 'bg-amber-50 text-amber-700 border-amber-200' },
               ].map(item => (
                 <span key={item.role} className={`text-[10px] px-2.5 py-0.5 rounded-full border font-semibold ${item.color}`}>
                   {item.role}

@@ -10,6 +10,7 @@ import StudentLayout from './components/layout/StudentLayout'
 
 // Auth
 import LoginPage from './pages/auth/LoginPage'
+import VersionUpdatePrompt from './components/ui/VersionUpdatePrompt'
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -177,6 +178,7 @@ export default function App() {
       <AuthProvider>
         <NotificationProvider>
           <AppRoutes />
+          <VersionUpdatePrompt />
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
