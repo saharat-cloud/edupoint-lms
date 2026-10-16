@@ -1,0 +1,2 @@
+ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS topic TEXT;
+ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS mission_points INT DEFAULT 0;
