@@ -50,8 +50,11 @@ import StudentProfile from './pages/student/StudentProfile'
 import StudentNotifications from './pages/student/StudentNotifications'
 import StudentCalendar from './pages/student/StudentCalendar'
 
+import AdminCheckin from './pages/admin/AdminCheckin'
 import AdminNotifications from './pages/admin/AdminNotifications'
 import TeacherNotifications from './pages/teacher/TeacherNotifications'
+
+import StudentCheckin from './pages/student/StudentCheckin'
 
 // Kiosk
 import KioskPage from './pages/kiosk/KioskPage'
@@ -120,6 +123,7 @@ function AppRoutes() {
               <Route path="settings" element={<AdminSettings />} />
               <Route path="games" element={<AdminGames />} />
               <Route path="notifications" element={<AdminNotifications />} />
+              <Route path="checkin" element={<AdminCheckin />} />
               <Route path="assignments" element={<TeacherAssignments />} />
               <Route path="assignments/create" element={<TeacherAssignmentCreate />} />
               <Route path="assignments/:id" element={<TeacherAssignmentDetail />} />
@@ -157,6 +161,7 @@ function AppRoutes() {
               <Route path="profile" element={<StudentProfile />} />
               <Route path="notifications" element={<StudentNotifications />} />
               <Route path="calendar" element={<StudentCalendar />} />
+              <Route path="checkin" element={<StudentCheckin />} />
               <Route path="*" element={<Navigate to="dashboard" replace />} />
             </Routes>
           </StudentLayout>

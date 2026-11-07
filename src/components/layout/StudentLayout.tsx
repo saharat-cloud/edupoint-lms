@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardList, Star, BookOpen, MessageCircle,
-  Gamepad2, User, Bell, Calendar, LogOut, Menu
+  Gamepad2, User, Bell, Calendar, LogOut, Menu, CheckSquare
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../contexts/NotificationContext'
@@ -11,6 +11,7 @@ import { confirmAction } from '../ui/index'
 
 const navItems = [
   { to: '/student/dashboard', icon: LayoutDashboard, label: 'หน้าหลัก' },
+  { to: '/student/checkin', icon: CheckSquare, label: 'เช็คอิน' },
   { to: '/student/assignments', icon: ClipboardList, label: 'งานของฉัน' },
   { to: '/student/points', icon: Star, label: 'Point' },
   { to: '/student/grades', icon: BookOpen, label: 'เกรด/คะแนน' },
@@ -113,9 +114,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-20 px-2 py-2 flex justify-around">
           {[
             { to: '/student/dashboard', icon: LayoutDashboard, label: 'หน้าหลัก' },
+            { to: '/student/checkin', icon: CheckSquare, label: 'เช็คอิน' },
             { to: '/student/assignments', icon: ClipboardList, label: 'งาน' },
             { to: '/student/games', icon: Gamepad2, label: 'เกม' },
-            { to: '/student/messages', icon: MessageCircle, label: 'แชท' },
             { to: '/student/profile', icon: User, label: 'โปรไฟล์' },
           ].map(item => (
             <NavLink

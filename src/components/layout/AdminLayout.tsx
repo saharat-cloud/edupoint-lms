@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, GraduationCap, Settings,
   ChevronLeft, ChevronRight, LogOut, Menu, X, Building2, Gamepad2, Monitor,
-  ClipboardList, FileCheck, MessageCircle, BarChart3
+  ClipboardList, FileCheck, MessageCircle, BarChart3, CheckSquare
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../contexts/NotificationContext'
@@ -29,6 +29,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { to: '/admin/messages', icon: MessageCircle, label: 'ข้อความ', badge: true, roles: ['SUPER_ADMIN', 'TEACHER'] },
     { to: '/admin/reports', icon: BarChart3, label: 'รายงาน', roles: ['SUPER_ADMIN', 'TEACHER'] },
     { to: '/admin/games', icon: Gamepad2, label: 'เกม', roles: ['SUPER_ADMIN', 'TEACHER'] },
+    { to: '/admin/checkin', icon: CheckSquare, label: 'เช็คอิน', roles: ['SUPER_ADMIN', 'TEACHER'] },
     { to: '/admin/settings', icon: Settings, label: 'ตั้งค่าระบบ', roles: ['SUPER_ADMIN'] },
   ]
 
