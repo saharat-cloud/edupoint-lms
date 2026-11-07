@@ -256,8 +256,9 @@ export default function GroupGenerator({ students, roomId, onClose, onSaved }: G
       const transactions = group.members.map(m => ({
         student_id: m.id,
         points: points,
-        reason: reason,
-        awarded_by: (supabase as any).auth?.user?.()?.id || null // Adjust this based on your auth setup, or just let DB trigger handle it if RLS doesn't require it here
+        transaction_type: points >= 0 ? 'EARN' : 'DEDUCTION',
+        source_type: 'GAME',
+        note: reason
       }))
 
       const { error } = await supabase.from('point_transactions').insert(transactions)

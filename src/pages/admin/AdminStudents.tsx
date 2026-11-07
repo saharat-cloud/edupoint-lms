@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Download, Upload, Search, Filter, Eye, Edit, CreditCard, Trash2 } from 'lucide-react'
+import { Plus, Download, Upload, CreditCard, Edit, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Student, EducationLevel, ClassRoom } from '../../lib/types'
 import {
@@ -20,11 +20,10 @@ export default function AdminStudents() {
   const [filterLevel, setFilterLevel] = useState('')
   const [filterRoom, setFilterRoom] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const PER_PAGE = 20
+  const [perPage, setPerPage] = useState<number>(20)
 
   const fetchStudents = useCallback(async () => {
     setLoading(true)
@@ -38,7 +37,10 @@ export default function AdminStudents() {
           student_total_points(total_points)
         `, { count: 'exact' })
         .order('student_code')
-        .range((page - 1) * PER_PAGE, page * PER_PAGE - 1)
+
+      if (perPage < 9999) {
+        query = query.range((page - 1) * perPage, page * perPage - 1)
+      }
 
       if (search) {
         query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,student_code.ilike.%${search}%,card_number.ilike.%${search}%`)
@@ -67,7 +69,7 @@ export default function AdminStudents() {
     } finally {
       setLoading(false)
     }
-  }, [search, filterLevel, filterRoom, filterStatus, page])
+  }, [search, filterLevel, filterRoom, filterStatus, page, perPage])
 
   useEffect(() => {
     supabase.from('education_levels').select('*').order('sort_order').then(({ data }) => {
@@ -130,7 +132,7 @@ export default function AdminStudents() {
             <button onClick={exportCSV} className="btn-secondary btn-sm">
               <Download className="w-4 h-4" /> Export CSV
             </button>
-            <button onClick={() => setShowImportModal(true)} className="btn-secondary btn-sm">
+            <button onClick={() => setShowImportModal(true)} className="btn-secondary btn-sm text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100">
               <Upload className="w-4 h-4" /> นำเข้า Excel
             </button>
             <button onClick={() => navigate('/admin/students/register')} className="btn-primary">
@@ -140,9 +142,9 @@ export default function AdminStudents() {
         }
       />
 
-      {/* Filters */}
+      {/* Filters with clean Rows-per-page dropdown */}
       <div className="card p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <SearchInput value={search} onChange={v => { setSearch(v); setPage(1) }} placeholder="ค้นหาชื่อ, รหัส, หมายเลขบัตร..." className="lg:col-span-1" />
           <select className="form-select" value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setPage(1) }}>
             <option value="">ทุกระดับ</option>
@@ -158,6 +160,12 @@ export default function AdminStudents() {
             <option value="INACTIVE">ไม่ใช้งาน</option>
             <option value="GRADUATED">จบการศึกษา</option>
             <option value="TRANSFERRED">ย้ายออก</option>
+          </select>
+          <select className="form-select font-medium text-slate-700" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1) }}>
+            <option value={20}>แสดง 20 คน</option>
+            <option value={50}>แสดง 50 คน</option>
+            <option value={100}>แสดง 100 คน</option>
+            <option value={9999}>แสดงทั้งหมด ({total} คน)</option>
           </select>
         </div>
       </div>
@@ -255,11 +263,9 @@ export default function AdminStudents() {
                         <button
                           onClick={async () => {
                             if (await confirmDelete('ยืนยันการลบนักเรียน', `คุณต้องการลบ ${student.first_name} ${student.last_name} ใช่หรือไม่? ข้อมูลทั้งหมดที่เกี่ยวข้องจะถูกลบ`)) {
-                              // ลบจาก auth.users ก่อน (ถ้ามี user_id)
                               if (student.user_id) {
                                 await supabase.rpc('admin_delete_user', { p_user_id: student.user_id })
                               }
-                              // ลบจากตาราง students
                               const { error } = await supabase.from('students').delete().eq('id', student.id)
                               if (error) {
                                 showError('ลบไม่สำเร็จ', error.message)
@@ -284,14 +290,22 @@ export default function AdminStudents() {
         </div>
       )}
 
-      {/* Pagination */}
-      {total > PER_PAGE && (
-        <div className="flex items-center justify-between text-sm text-slate-600">
-          <p>แสดง {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} จาก {total.toLocaleString()} รายการ</p>
-          <div className="flex gap-2">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary btn-sm">ก่อนหน้า</button>
-            <button disabled={page * PER_PAGE >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary btn-sm">ถัดไป</button>
-          </div>
+      {/* Pagination (Minimal & Clean) */}
+      {total > 0 && (
+        <div className="flex items-center justify-between text-sm text-slate-500 px-1">
+          <p>
+            {perPage >= 9999 
+              ? `แสดงทั้งหมด ${total.toLocaleString()} คน` 
+              : `แสดง ${(page - 1) * perPage + 1}–${Math.min(page * perPage, total)} จาก ${total.toLocaleString()} คน`
+            }
+          </p>
+          {perPage < 9999 && total > perPage && (
+            <div className="flex items-center gap-2">
+              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary btn-sm">ก่อนหน้า</button>
+              <span className="text-xs text-slate-500">หน้า {page} / {Math.ceil(total / perPage)}</span>
+              <button disabled={page * perPage >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary btn-sm">ถัดไป</button>
+            </div>
+          )}
         </div>
       )}
 

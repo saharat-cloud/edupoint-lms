@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, UserMinus, Plus, Search, Trophy, Medal, PlusCircle, MinusCircle, LayoutGrid, Users, X, RotateCcw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import type { ClassRoom, Student, PointSetting, PointLevel } from '../../lib/types'
+import type { ClassRoom, Student, PointSetting, PointLevel, EducationLevel } from '../../lib/types'
 import { PageLoading, Avatar, Badge, Modal, showSuccess, showError, confirmDelete } from '../../components/ui/index'
 import Swal from 'sweetalert2'
 import StudentRandomizer from '../../components/games/StudentRandomizer'
 import GroupGenerator from '../../components/games/GroupGenerator'
+import StudentExcelImportModal from '../../components/admin/StudentExcelImportModal'
 
 export default function AdminClassDetail() {
   const { id } = useParams()
@@ -21,6 +22,9 @@ export default function AdminClassDetail() {
   
   // Modal Add Students
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [educationLevels, setEducationLevels] = useState<EducationLevel[]>([])
+  const [allRooms, setAllRooms] = useState<ClassRoom[]>([])
   const [availableStudents, setAvailableStudents] = useState<Student[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
@@ -56,13 +60,17 @@ export default function AdminClassDetail() {
       .eq('class_room_id', id)
       .order('student_code')
       
-    // Load Point Settings & Levels
-    const [pSetRes, pLvlRes] = await Promise.all([
+    // Load Point Settings & Levels & All Rooms/Levels for Import
+    const [pSetRes, pLvlRes, levelsRes, allRoomsRes] = await Promise.all([
       supabase.from('point_settings').select('*').single(),
-      supabase.from('point_levels').select('*').order('sort_order')
+      supabase.from('point_levels').select('*').order('sort_order'),
+      supabase.from('education_levels').select('*').order('sort_order'),
+      supabase.from('class_rooms').select('*').order('name')
     ])
     if (pSetRes.data) setPointSetting(pSetRes.data)
     if (pLvlRes.data) setPointLevels(pLvlRes.data)
+    if (levelsRes.data) setEducationLevels(levelsRes.data)
+    if (allRoomsRes.data) setAllRooms(allRoomsRes.data as ClassRoom[])
 
     if (studentsData) {
       const mappedData = studentsData.map((s: any) => {
@@ -240,7 +248,7 @@ export default function AdminClassDetail() {
         const { error } = await supabase.from('point_transactions').insert({
           student_id: student.id,
           points: pts,
-          transaction_type: 'MANUAL',
+          transaction_type: pts >= 0 ? 'EARN' : 'DEDUCTION',
           source_type: 'MANUAL',
           note: note || (pts > 0 ? 'ได้รับคะแนนพิเศษ' : 'โดนหักคะแนน')
         })
@@ -266,7 +274,7 @@ export default function AdminClassDetail() {
     const { error } = await supabase.from('point_transactions').insert({
       student_id: student.id,
       points: pts,
-      transaction_type: 'MANUAL',
+      transaction_type: pts >= 0 ? 'EARN' : 'DEDUCTION',
       source_type: 'MANUAL',
       note: note
     })
@@ -588,9 +596,16 @@ export default function AdminClassDetail() {
           </div>
         </div>
         
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button onClick={() => setShowWheel(true)} className="btn-secondary flex-1 sm:flex-none">🎲 สุ่มชื่อ</button>
           <button onClick={() => setShowGroups(true)} className="btn-secondary flex-1 sm:flex-none">👥 จัดกลุ่ม</button>
+          <button 
+            onClick={() => setShowImportModal(true)} 
+            className="btn-secondary flex-1 sm:flex-none text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100 flex items-center justify-center gap-1.5"
+            title="นำเข้าจากไฟล์ Excel หรือโหลดข้อมูล ปวช.1/11"
+          >
+            📥 นำเข้า Excel
+          </button>
           <button 
             onClick={openAddModal} 
             disabled={students.length >= room.max_students}
@@ -1077,6 +1092,20 @@ export default function AdminClassDetail() {
       <Modal isOpen={showGroups} onClose={() => setShowGroups(false)} title="ระบบสุ่มจัดกลุ่ม" size="7xl">
         <GroupGenerator students={students} roomId={room.id} onClose={() => setShowGroups(false)} onSaved={loadData} />
       </Modal>
+
+      {/* Student Excel / Preset Import Modal */}
+      <StudentExcelImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          setShowImportModal(false)
+          loadData()
+        }}
+        educationLevels={educationLevels}
+        classRooms={allRooms}
+        initialLevelId={room?.education_level_id || ''}
+        initialRoomId={room?.id || ''}
+      />
 
     </div>
   )

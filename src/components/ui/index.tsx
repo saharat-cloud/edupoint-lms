@@ -169,12 +169,19 @@ export function ConversationStatusBadge({ status }: { status: string }) {
 interface AvatarProps {
   src?: string | null
   name: string
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'
   className?: string
 }
 
 export function Avatar({ src, name, size = 'md', className = '' }: AvatarProps) {
-  const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-11 h-11 text-base', xl: 'w-16 h-16 text-xl' }
+  const sizes = { 
+    sm: 'w-7 h-7 text-xs', 
+    md: 'w-9 h-9 text-sm', 
+    lg: 'w-11 h-11 text-base', 
+    xl: 'w-16 h-16 text-xl',
+    '2xl': 'w-24 h-24 text-2xl',
+    '3xl': 'w-32 h-32 text-3xl'
+  }
   const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   const colors = ['bg-primary-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500', 'bg-sky-500']
   const color = colors[name.charCodeAt(0) % colors.length]
