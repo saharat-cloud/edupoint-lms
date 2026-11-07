@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Clock, Users, CheckCircle, XCircle, ChevronDown, ChevronUp, Trophy, Loader2 } from 'lucide-react'
+import { Plus, Clock, Users, XCircle, ChevronDown, ChevronUp, Loader2, Copy, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateTime, confirmAction } from '../../components/ui/index'
@@ -123,6 +123,26 @@ export default function AdminCheckin() {
     if (!ok) return
     await supabase.from('checkin_sessions').delete().eq('id', id)
     setSessions(s => s.filter(x => x.id !== id))
+  }
+
+  function handleDuplicate(s: CheckinSession) {
+    const now = new Date()
+    now.setSeconds(0, 0)
+    setForm({
+      title: s.title,
+      class_room_id: s.class_room_id,
+      start_time: now.toISOString().slice(0, 16),
+      end_time: '',
+      base_points: s.base_points,
+      bonus_1st: s.bonus_1st,
+      bonus_2nd: s.bonus_2nd,
+      bonus_3rd: s.bonus_3rd,
+      decay_per_interval: s.decay_per_interval,
+      decay_interval_minutes: s.decay_interval_minutes,
+      min_points: s.min_points,
+    })
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function toggleExpand(id: string) {
@@ -275,6 +295,13 @@ export default function AdminCheckin() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      className="btn-icon btn-ghost text-primary-500"
+                      title="ใช้ซ้ำ — copy settings มาสร้างใหม่"
+                      onClick={() => handleDuplicate(s)}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
                     {s.status === 'OPEN' && (
                       <button className="btn-icon btn-ghost text-amber-500" title="ปิด Session" onClick={() => handleClose(s.id)}>
                         <XCircle className="w-4 h-4" />
@@ -340,3 +367,4 @@ export default function AdminCheckin() {
     </div>
   )
 }
+
