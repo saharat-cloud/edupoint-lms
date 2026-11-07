@@ -1,17 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { CheckCircle, Clock, Trophy, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle, Clock, Loader2, AlertCircle, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface CheckinSession {
   id: string
   title: string
+  class_room_id: string | null
   start_time: string
   end_time: string | null
+  golden_minutes?: number
+  golden_bonus?: number
   base_points: number
-  bonus_1st: number
-  bonus_2nd: number
-  bonus_3rd: number
   decay_per_interval: number
   decay_interval_minutes: number
   min_points: number
@@ -23,8 +23,7 @@ interface CheckinResult {
   ok: boolean
   error?: string
   rank?: number
-  base_points?: number
-  bonus?: number
+  in_golden?: boolean
   total_points?: number
 }
 
@@ -34,12 +33,35 @@ interface MyRecord {
   checked_in_at: string
 }
 
-function calcPoints(session: CheckinSession, now: Date): { base: number; note: string } {
-  const minutesLate = Math.max(0, (now.getTime() - new Date(session.start_time).getTime()) / 60000)
-  const decay = Math.floor(minutesLate / (session.decay_interval_minutes || 1)) * session.decay_per_interval
-  const base = Math.max(session.min_points, session.base_points - decay)
-  if (decay === 0) return { base, note: 'มาตรงเวลา!' }
-  return { base, note: `สาย ${Math.floor(minutesLate)} นาที (-${decay} pt)` }
+function calcCurrentPoints(session: CheckinSession, now: Date): { pts: number; isGolden: boolean; text: string } {
+  const startTime = new Date(session.start_time).getTime()
+  const goldenMins = session.golden_minutes ?? 5
+  const goldenBonus = session.golden_bonus ?? 5
+  const goldenEnd = startTime + goldenMins * 60000
+
+  if (now.getTime() <= goldenEnd) {
+    const remainSec = Math.max(0, Math.floor((goldenEnd - now.getTime()) / 1000))
+    const m = Math.floor(remainSec / 60)
+    const s = remainSec % 60
+    return {
+      pts: session.base_points + goldenBonus,
+      isGolden: true,
+      text: `⭐ อยู่ในช่วงเวลาทอง! (เหลือ ${m}:${s.toString().padStart(2, '0')})`,
+    }
+  }
+
+  // After golden time
+  const msAfter = now.getTime() - goldenEnd
+  const minsAfter = Math.max(0, msAfter / 60000)
+  const decayInterval = session.decay_interval_minutes || 5
+  const decayStep = Math.floor(minsAfter / decayInterval)
+  const decayPts = decayStep * (session.decay_per_interval || 1)
+  const pts = Math.max(session.min_points, session.base_points - decayPts)
+
+  if (decayPts === 0) {
+    return { pts, isGolden: false, text: 'เวลาปกติ (ยังไม่หักคะแนน)' }
+  }
+  return { pts, isGolden: false, text: `เวลาปกติ (สายไป ${Math.floor(minsAfter)} นาที, หัก ${decayPts} pt)` }
 }
 
 function formatTimeLeft(endTime: string): string {
@@ -61,13 +83,12 @@ export default function StudentCheckin() {
   const [now, setNow] = useState(new Date())
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Live clock
+  // Live timer tick every second
   useEffect(() => {
     timerRef.current = setInterval(() => setNow(new Date()), 1000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
 
-  // Update time-left display
   useEffect(() => {
     const map: Record<string, string> = {}
     sessions.forEach(s => { if (s.end_time) map[s.id] = formatTimeLeft(s.end_time) })
@@ -76,22 +97,27 @@ export default function StudentCheckin() {
 
   const load = useCallback(async () => {
     if (!user) return
-    // Get student
     const { data: stu } = await supabase.from('students').select('id,class_room_id').eq('user_id', user.id).single()
     if (!stu) { setLoading(false); return }
     setStudentId(stu.id)
 
-    // Get open sessions for this room
-    const { data: sess } = await supabase
+    // Load open sessions: either for this student's room OR open to everyone (class_room_id is null)
+    let query = supabase
       .from('checkin_sessions')
       .select('*, class_rooms(name)')
-      .eq('class_room_id', stu.class_room_id)
       .eq('status', 'OPEN')
       .order('created_at', { ascending: false })
 
+    if (stu.class_room_id) {
+      query = query.or(`class_room_id.is.null,class_room_id.eq.${stu.class_room_id}`)
+    } else {
+      query = query.is('class_room_id', null)
+    }
+
+    const { data: sess } = await query
     setSessions((sess || []) as CheckinSession[])
 
-    // Get my records
+    // Load existing records for these sessions
     if (sess && sess.length > 0) {
       const ids = sess.map((s: CheckinSession) => s.id)
       const { data: recs } = await supabase
@@ -126,7 +152,6 @@ export default function StudentCheckin() {
     const res = data as CheckinResult
     setResult({ sessionId, res })
     if (res.ok) {
-      // Refresh records
       setMyRecords(m => ({
         ...m,
         [sessionId]: {
@@ -156,64 +181,72 @@ export default function StudentCheckin() {
   return (
     <div className="max-w-lg mx-auto space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-800">เช็คอิน</h1>
-        <p className="text-sm text-slate-500 mt-0.5">กดปุ่มเช็คอินเพื่อรับคะแนน</p>
+        <h1 className="text-xl font-bold text-slate-800">เช็คอินเข้าเรียน</h1>
+        <p className="text-sm text-slate-500 mt-0.5">กดปุ่มเช็คอินเพื่อรับคะแนนสะสม</p>
       </div>
 
       {sessions.length === 0 ? (
         <div className="card p-10 text-center text-slate-400">
           <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="font-medium">ไม่มี Session เช็คอินที่เปิดอยู่</p>
-          <p className="text-sm mt-1">รอครูเปิด session เช็คชื่อ</p>
+          <p className="font-medium">ไม่มี Session เช็คอินที่เปิดอยู่ในขณะนี้</p>
+          <p className="text-sm mt-1">รอคุณครูเปิด session เช็คชื่อ</p>
         </div>
       ) : (
         sessions.map(session => {
           const myRecord = myRecords[session.id]
           const isCheckedIn = !!myRecord
           const isExpired = session.end_time ? now > new Date(session.end_time) : false
-          const preview = calcPoints(session, now)
+          const pointState = calcCurrentPoints(session, now)
           const isActive = checkinLoading === session.id
           const thisResult = result?.sessionId === session.id ? result.res : null
+          const roomName = (session.class_rooms as { name: string } | undefined)?.name
 
           return (
-            <div key={session.id} className={`card overflow-hidden ${isCheckedIn ? 'border-green-200' : ''}`}>
+            <div key={session.id} className={`card overflow-hidden transition-all ${
+              isCheckedIn ? 'border-green-200' : pointState.isGolden ? 'border-amber-300 ring-2 ring-amber-200' : ''
+            }`}>
               {/* Header */}
-              <div className={`px-5 py-4 ${isCheckedIn ? 'bg-green-50' : 'bg-white'}`}>
+              <div className={`px-5 py-4 ${
+                isCheckedIn ? 'bg-green-50' : pointState.isGolden ? 'bg-amber-50/60' : 'bg-white'
+              }`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold text-slate-800">{session.title}</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-slate-800">{session.title}</h2>
+                      {pointState.isGolden && !isCheckedIn && !isExpired && (
+                        <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                          <Sparkles className="w-3 h-3 text-amber-500" /> เวลาทอง
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {(session.class_rooms as { name: string } | undefined)?.name}
+                      {roomName ? `ห้อง ${roomName}` : '🌐 เช็คอินได้ทุกคน'}
                     </p>
                   </div>
+
                   {session.end_time && !isCheckedIn && !isExpired && (
-                    <div className="flex items-center gap-1 text-sm font-mono font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-lg">
+                    <div className="flex items-center gap-1 text-xs font-mono font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg">
                       <Clock className="w-3.5 h-3.5" />
-                      {timeLeft[session.id] || '—'}
+                      เหลือเวลา {timeLeft[session.id] || '—'}
                     </div>
                   )}
                 </div>
 
                 {/* Point preview */}
                 {!isCheckedIn && !isExpired && (
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="bg-primary-50 text-primary-700 px-2 py-1 rounded-lg font-medium">
-                      🎯 ตอนนี้ได้ {preview.base} + โบนัสอันดับ pt
-                    </span>
-                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{preview.note}</span>
+                  <div className="mt-3 p-2.5 bg-white/80 rounded-xl border border-slate-200/80 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">คะแนนที่จะได้รับตอนนี้:</span>
+                      <span className={`text-base font-bold ${pointState.isGolden ? 'text-amber-600' : 'text-primary-600'}`}>
+                        +{pointState.pts} คะแนน
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">{pointState.text}</p>
                   </div>
                 )}
-
-                {/* Bonuses info */}
-                <div className="mt-2 flex gap-2 text-xs text-slate-500">
-                  <span>🥇 +{session.bonus_1st}</span>
-                  <span>🥈 +{session.bonus_2nd}</span>
-                  <span>🥉 +{session.bonus_3rd}</span>
-                  <span className="ml-auto">📉 -{session.decay_per_interval}pt / {session.decay_interval_minutes}นาที</span>
-                </div>
               </div>
 
-              {/* Result Banner */}
+              {/* Error message if any */}
               {thisResult && !thisResult.ok && (
                 <div className="mx-4 mb-3 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -221,14 +254,16 @@ export default function StudentCheckin() {
                 </div>
               )}
 
-              {/* Action / Status */}
-              <div className="px-5 pb-5">
+              {/* Action Button */}
+              <div className="px-5 pb-5 pt-1">
                 {isCheckedIn ? (
                   <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
                     <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
                     <div>
                       <p className="font-semibold text-green-800">{rankLabel(myRecord.rank)}</p>
-                      <p className="text-sm text-green-600">ได้รับ <strong>{myRecord.points_awarded} คะแนน</strong></p>
+                      <p className="text-sm text-green-600">
+                        เช็คอินสำเร็จ ได้รับ <strong>{myRecord.points_awarded} คะแนน</strong>
+                      </p>
                     </div>
                   </div>
                 ) : isExpired ? (
@@ -238,14 +273,20 @@ export default function StudentCheckin() {
                   </div>
                 ) : (
                   <button
-                    className="w-full btn-primary py-3 text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+                    className={`w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2 text-white shadow-md transition-all active:scale-[0.99] disabled:opacity-60 ${
+                      pointState.isGolden
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-200'
+                        : 'bg-primary-600 hover:bg-primary-700 shadow-primary-200'
+                    }`}
                     onClick={() => doCheckin(session.id)}
                     disabled={isActive}
                   >
                     {isActive ? (
-                      <><Loader2 className="w-5 h-5 animate-spin" /> กำลังเช็คอิน...</>
+                      <><Loader2 className="w-5 h-5 animate-spin" /> กำลังบันทึกการเช็คอิน...</>
+                    ) : pointState.isGolden ? (
+                      <><Sparkles className="w-5 h-5" /> กดเช็คอินรับโบนัสเวลาทอง (+{pointState.pts} pt)</>
                     ) : (
-                      <><CheckCircle className="w-5 h-5" /> เช็คอิน</>
+                      <><CheckCircle className="w-5 h-5" /> กดเช็คอิน (+{pointState.pts} pt)</>
                     )}
                   </button>
                 )}

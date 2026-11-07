@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Clock, Users, XCircle, ChevronDown, ChevronUp, Loader2, Copy, RefreshCw } from 'lucide-react'
+import { Plus, Clock, Users, XCircle, ChevronDown, ChevronUp, Loader2, Copy, Edit2, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateTime, confirmAction } from '../../components/ui/index'
@@ -8,20 +8,18 @@ interface ClassRoom { id: string; name: string }
 interface CheckinSession {
   id: string
   title: string
-  class_room_id: string
+  class_room_id: string | null
   class_rooms?: { name: string }
   start_time: string
   end_time: string | null
+  golden_minutes?: number
+  golden_bonus?: number
   base_points: number
-  bonus_1st: number
-  bonus_2nd: number
-  bonus_3rd: number
   decay_per_interval: number
   decay_interval_minutes: number
   min_points: number
   status: 'OPEN' | 'CLOSED'
   created_at: string
-  checkin_records?: CheckinRecord[]
 }
 interface CheckinRecord {
   id: string
@@ -34,13 +32,12 @@ interface CheckinRecord {
 
 const defaultForm = {
   title: 'เช็คชื่อ',
-  class_room_id: '',
+  class_room_id: '', // empty means all classrooms / everyone
   start_time: '',
   end_time: '',
+  golden_minutes: 5,
+  golden_bonus: 5,
   base_points: 10,
-  bonus_1st: 5,
-  bonus_2nd: 3,
-  bonus_3rd: 1,
   decay_per_interval: 1,
   decay_interval_minutes: 5,
   min_points: 1,
@@ -51,6 +48,7 @@ export default function AdminCheckin() {
   const [sessions, setSessions] = useState<CheckinSession[]>([])
   const [rooms, setRooms] = useState<ClassRoom[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({ ...defaultForm })
   const [saving, setSaving] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -72,7 +70,6 @@ export default function AdminCheckin() {
     async function init() {
       const { data: roomData } = await supabase.from('class_rooms').select('id,name').order('name')
       setRooms(roomData || [])
-      // set default start_time to now
       const now = new Date()
       now.setSeconds(0, 0)
       setForm(f => ({ ...f, start_time: now.toISOString().slice(0, 16) }))
@@ -94,20 +91,83 @@ export default function AdminCheckin() {
     setLoadingRecords(null)
   }
 
-  async function handleCreate() {
-    if (!form.class_room_id || !form.start_time) return alert('กรุณาเลือกห้องเรียนและเวลาเริ่ม')
+  function handleOpenCreate() {
+    setEditingId(null)
+    const now = new Date()
+    now.setSeconds(0, 0)
+    setForm({ ...defaultForm, start_time: now.toISOString().slice(0, 16) })
+    setShowForm(true)
+  }
+
+  function handleEdit(s: CheckinSession) {
+    setEditingId(s.id)
+    setForm({
+      title: s.title,
+      class_room_id: s.class_room_id || '',
+      start_time: s.start_time ? new Date(s.start_time).toISOString().slice(0, 16) : '',
+      end_time: s.end_time ? new Date(s.end_time).toISOString().slice(0, 16) : '',
+      golden_minutes: s.golden_minutes ?? 5,
+      golden_bonus: s.golden_bonus ?? 5,
+      base_points: s.base_points,
+      decay_per_interval: s.decay_per_interval,
+      decay_interval_minutes: s.decay_interval_minutes,
+      min_points: s.min_points,
+    })
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleDuplicate(s: CheckinSession) {
+    setEditingId(null)
+    const now = new Date()
+    now.setSeconds(0, 0)
+    setForm({
+      title: s.title,
+      class_room_id: s.class_room_id || '',
+      start_time: now.toISOString().slice(0, 16),
+      end_time: '',
+      golden_minutes: s.golden_minutes ?? 5,
+      golden_bonus: s.golden_bonus ?? 5,
+      base_points: s.base_points,
+      decay_per_interval: s.decay_per_interval,
+      decay_interval_minutes: s.decay_interval_minutes,
+      min_points: s.min_points,
+    })
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function handleSave() {
+    if (!form.start_time) return alert('กรุณาระบุเวลาเริ่ม')
     setSaving(true)
     const payload = {
-      ...form,
-      created_by: user?.id,
+      title: form.title,
+      class_room_id: form.class_room_id ? form.class_room_id : null,
       start_time: new Date(form.start_time).toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
+      golden_minutes: Number(form.golden_minutes) || 0,
+      golden_bonus: Number(form.golden_bonus) || 0,
+      base_points: Number(form.base_points),
+      decay_per_interval: Number(form.decay_per_interval),
+      decay_interval_minutes: Number(form.decay_interval_minutes),
+      min_points: Number(form.min_points),
     }
-    const { error } = await supabase.from('checkin_sessions').insert(payload)
-    setSaving(false)
-    if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return }
+
+    if (editingId) {
+      const { error } = await supabase.from('checkin_sessions').update(payload).eq('id', editingId)
+      setSaving(false)
+      if (error) { alert('เกิดข้อผิดพลาดในการแก้ไข: ' + error.message); return }
+    } else {
+      const { error } = await supabase.from('checkin_sessions').insert({
+        ...payload,
+        created_by: user?.id,
+      })
+      setSaving(false)
+      if (error) { alert('เกิดข้อผิดพลาดในการสร้าง: ' + error.message); return }
+    }
+
     setShowForm(false)
-    setForm({ ...defaultForm, start_time: new Date().toISOString().slice(0, 16) })
+    setEditingId(null)
     await loadSessions()
   }
 
@@ -123,26 +183,6 @@ export default function AdminCheckin() {
     if (!ok) return
     await supabase.from('checkin_sessions').delete().eq('id', id)
     setSessions(s => s.filter(x => x.id !== id))
-  }
-
-  function handleDuplicate(s: CheckinSession) {
-    const now = new Date()
-    now.setSeconds(0, 0)
-    setForm({
-      title: s.title,
-      class_room_id: s.class_room_id,
-      start_time: now.toISOString().slice(0, 16),
-      end_time: '',
-      base_points: s.base_points,
-      bonus_1st: s.bonus_1st,
-      bonus_2nd: s.bonus_2nd,
-      bonus_3rd: s.bonus_3rd,
-      decay_per_interval: s.decay_per_interval,
-      decay_interval_minutes: s.decay_interval_minutes,
-      min_points: s.min_points,
-    })
-    setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function toggleExpand(id: string) {
@@ -162,96 +202,117 @@ export default function AdminCheckin() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">เช็คอิน</h1>
-          <p className="text-sm text-slate-500 mt-0.5">จัดการ session เช็คชื่อและคะแนน</p>
+          <h1 className="text-xl font-bold text-slate-800">ระบบเช็คอิน</h1>
+          <p className="text-sm text-slate-500 mt-0.5">จัดการ session เช็คชื่อ โบนัสเวลาทอง และคะแนนการมาเรียน</p>
         </div>
-        <button className="btn-primary flex items-center gap-2 text-sm" onClick={() => setShowForm(v => !v)}>
+        <button className="btn-primary flex items-center gap-2 text-sm" onClick={handleOpenCreate}>
           <Plus className="w-4 h-4" />
           สร้าง Session
         </button>
       </div>
 
-      {/* Create Form */}
+      {/* Create / Edit Form */}
       {showForm && (
         <div className="card p-5 space-y-4 border-primary-200 bg-primary-50/30">
-          <h2 className="font-semibold text-slate-700">สร้าง Session เช็คอินใหม่</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-slate-700">
+              {editingId ? 'แก้ไข Session เช็คอิน' : 'สร้าง Session เช็คอินใหม่'}
+            </h2>
+            <button className="text-slate-400 hover:text-slate-600 text-sm" onClick={() => setShowForm(false)}>✕</button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Title */}
             <div className="sm:col-span-2">
               <label className="form-label">ชื่อ Session</label>
               <input className="form-input" value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="เช็คชื่อ" />
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="เช่น เช็คชื่อคาบเช้า" />
             </div>
+
             {/* Classroom */}
             <div>
-              <label className="form-label">ห้องเรียน</label>
+              <label className="form-label">ห้องเรียนที่อนุญาต</label>
               <select className="form-select" value={form.class_room_id}
                 onChange={e => setForm(f => ({ ...f, class_room_id: e.target.value }))}>
-                <option value="">— เลือกห้อง —</option>
+                <option value="">🌐 ทุกคนเช็คอินได้ (ไม่จำกัดห้อง)</option>
                 {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>
+
             {/* Start Time */}
             <div>
               <label className="form-label">เวลาเริ่ม</label>
               <input type="datetime-local" className="form-input" value={form.start_time}
                 onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))} />
             </div>
-            {/* End Time */}
-            <div>
-              <label className="form-label">เวลาสิ้นสุด <span className="text-slate-400 font-normal">(ไม่กำหนด = ไม่มีกำหนด)</span></label>
-              <input type="datetime-local" className="form-input" value={form.end_time}
-                onChange={e => setForm(f => ({ ...f, end_time: e.target.value }))} />
+
+            {/* Golden Time Section */}
+            <div className="sm:col-span-2 p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>กำหนดเวลาทอง (Golden Time Bonus)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label text-xs">ช่วงเวลาทอง (นาทีแรกหลังจากเริ่ม)</label>
+                  <input type="number" min={0} className="form-input text-sm" value={form.golden_minutes}
+                    onChange={e => setForm(f => ({ ...f, golden_minutes: +e.target.value }))} placeholder="เช่น 5 นาทีแรก" />
+                </div>
+                <div>
+                  <label className="form-label text-xs">โบนัสคะแนนพิเศษเวลาทอง (+pt)</label>
+                  <input type="number" min={0} className="form-input text-sm" value={form.golden_bonus}
+                    onChange={e => setForm(f => ({ ...f, golden_bonus: +e.target.value }))} placeholder="เช่น +5 คะแนน" />
+                </div>
+              </div>
             </div>
+
             {/* Base Points */}
             <div>
-              <label className="form-label">คะแนนพื้นฐาน</label>
+              <label className="form-label">คะแนนปกติ (เมื่อเช็คอินทัน)</label>
               <input type="number" min={1} className="form-input" value={form.base_points}
                 onChange={e => setForm(f => ({ ...f, base_points: +e.target.value }))} />
             </div>
-            {/* Bonuses */}
-            <div className="sm:col-span-2">
-              <label className="form-label">โบนัสอันดับ</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['bonus_1st','bonus_2nd','bonus_3rd'] as const).map((k, i) => (
-                  <div key={k} className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm">{['🥇','🥈','🥉'][i]}</span>
-                    <input type="number" min={0} className="form-input pl-8" value={form[k]}
-                      onChange={e => setForm(f => ({ ...f, [k]: +e.target.value }))} />
-                  </div>
-                ))}
-              </div>
+
+            {/* End Time */}
+            <div>
+              <label className="form-label">เวลาสิ้นสุดการเช็คอิน <span className="text-slate-400 font-normal">(เว้นว่างถ้าไม่จำกัด)</span></label>
+              <input type="datetime-local" className="form-input" value={form.end_time}
+                onChange={e => setForm(f => ({ ...f, end_time: e.target.value }))} />
             </div>
+
             {/* Decay */}
             <div>
-              <label className="form-label">ลดทุก (นาที)</label>
+              <label className="form-label">มาช้าลดลงทุก (นาที)</label>
               <input type="number" min={1} className="form-input" value={form.decay_interval_minutes}
                 onChange={e => setForm(f => ({ ...f, decay_interval_minutes: +e.target.value }))} />
             </div>
             <div>
-              <label className="form-label">ลดทีละ (คะแนน)</label>
+              <label className="form-label">ลดลงทีละ (คะแนน)</label>
               <input type="number" min={0} className="form-input" value={form.decay_per_interval}
                 onChange={e => setForm(f => ({ ...f, decay_per_interval: +e.target.value }))} />
             </div>
+
             {/* Min Points */}
             <div>
-              <label className="form-label">คะแนนขั้นต่ำ</label>
+              <label className="form-label">คะแนนขั้นต่ำสุดที่ยังได้</label>
               <input type="number" min={0} className="form-input" value={form.min_points}
                 onChange={e => setForm(f => ({ ...f, min_points: +e.target.value }))} />
             </div>
           </div>
+
           {/* Preview */}
-          <div className="bg-white rounded-xl p-3 border border-slate-200 text-sm text-slate-600">
-            <span className="font-medium text-slate-700">ตัวอย่าง: </span>
-            มาตรงเวลา = <strong>{form.base_points + form.bonus_1st}</strong> pt (อันดับ 1) •{' '}
-            ทุก {form.decay_interval_minutes} นาทีที่สาย ลด {form.decay_per_interval} pt •{' '}
-            ขั้นต่ำ {form.min_points} pt
+          <div className="bg-white rounded-xl p-3 border border-slate-200 text-xs text-slate-600 space-y-1">
+            <p className="font-medium text-slate-700">📌 สรุปเงื่อนไขคะแนน:</p>
+            <p>• <strong>ช่วงเวลาทอง ({form.golden_minutes} นาทีแรก):</strong> ได้รับ <span className="text-amber-600 font-bold">{form.base_points + form.golden_bonus} pt</span> ({form.base_points} + {form.golden_bonus} โบนัส)</p>
+            <p>• <strong>เวลาปกติ (หลังพ้นเวลาทอง):</strong> เริ่มต้นที่ <strong>{form.base_points} pt</strong> และจะลด {form.decay_per_interval} pt ทุกๆ {form.decay_interval_minutes} นาที</p>
+            <p>• <strong>คะแนนต่ำสุดที่ได้รับ:</strong> {form.min_points} pt</p>
           </div>
+
           <div className="flex gap-2 justify-end">
             <button className="btn-secondary text-sm" onClick={() => setShowForm(false)}>ยกเลิก</button>
-            <button className="btn-primary text-sm flex items-center gap-1.5" onClick={handleCreate} disabled={saving}>
+            <button className="btn-primary text-sm flex items-center gap-1.5" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              สร้าง Session
+              {editingId ? 'บันทึกการแก้ไข' : 'สร้าง Session'}
             </button>
           </div>
         </div>
@@ -270,10 +331,10 @@ export default function AdminCheckin() {
           {sessions.map(s => {
             const records = recordsMap[s.id] || []
             const isExpanded = expandedId === s.id
+            const roomName = (s.class_rooms as { name: string } | undefined)?.name
             return (
               <div key={s.id} className="card overflow-hidden">
                 <div className="p-4 flex items-start gap-3">
-                  {/* Status dot */}
                   <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.status === 'OPEN' ? 'bg-green-500' : 'bg-slate-300'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -283,18 +344,37 @@ export default function AdminCheckin() {
                       }`}>
                         {s.status === 'OPEN' ? 'เปิดอยู่' : 'ปิดแล้ว'}
                       </span>
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600 font-medium">
+                        {roomName ? `ห้อง ${roomName}` : '🌐 ทุกคนเช็คอินได้'}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {(s.class_rooms as { name: string } | undefined)?.name || '—'} · เริ่ม {formatDateTime(s.start_time)}
-                      {s.end_time ? ` · สิ้นสุด ${formatDateTime(s.end_time)}` : ''}
+
+                    <p className="text-xs text-slate-500 mt-1">
+                      เริ่ม {formatDateTime(s.start_time)}
+                      {s.end_time ? ` · สิ้นสุด ${formatDateTime(s.end_time)}` : ' · ไม่จำกัดเวลาสิ้นสุด'}
                     </p>
-                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-600">
-                      <span>🎯 {s.base_points} pt</span>
-                      <span>🥇+{s.bonus_1st} 🥈+{s.bonus_2nd} 🥉+{s.bonus_3rd}</span>
-                      <span>📉 ลด {s.decay_per_interval}pt / {s.decay_interval_minutes}นาที · ขั้นต่ำ {s.min_points}pt</span>
+
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                      <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                        ⭐ เวลาทอง {s.golden_minutes ?? 5} นาทีแรก (+{s.golden_bonus ?? 5} pt)
+                      </span>
+                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                        คะแนนปกติ {s.base_points} pt
+                      </span>
+                      <span className="text-slate-500 px-1 py-0.5">
+                        ลด {s.decay_per_interval}pt/{s.decay_interval_minutes}นาที · ต่ำสุด {s.min_points}pt
+                      </span>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      className="btn-icon btn-ghost text-slate-600 hover:text-primary-600"
+                      title="แก้ไข Session"
+                      onClick={() => handleEdit(s)}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
                     <button
                       className="btn-icon btn-ghost text-primary-500"
                       title="ใช้ซ้ำ — copy settings มาสร้างใหม่"
@@ -320,7 +400,7 @@ export default function AdminCheckin() {
                   </div>
                 </div>
 
-                {/* Records */}
+                {/* Records list */}
                 {isExpanded && (
                   <div className="border-t border-slate-100 bg-slate-50">
                     {records.length === 0 ? (
@@ -367,4 +447,3 @@ export default function AdminCheckin() {
     </div>
   )
 }
-
